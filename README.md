@@ -13,15 +13,15 @@ because projects in them are more massive than in other folders.
 
 ---
 **#Morris-Bot:**
-- EventHandler.py
-- BotAccount.py
-- modules
--- commands
--- database
--- ege_parser
--- group_manager
--- march8
-- ...and other files...
+* EventHandler.py
+* BotAccount.py
+* modules
+** commands
+** database
+** ege_parser
+** group_manager
+** march8
+* ...and other files...
 
 // This bot for communities in vk.com
 // It can broadcast messages from administrators to members and answer to commands from members.
