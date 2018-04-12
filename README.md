@@ -8,11 +8,11 @@
 
 Here all "homeworks" for last 6 month.
 
-I'd like you checking folders whose names start with "#" 
+I'd like you check folders whose names start with "#" 
 because projects in them are more massive than in other folders.
 
 ---
-#MorrisBot_project:
+**#MorrisBot_project:**
 - EventHandler.py
 - BotAccount.py
 - modules
@@ -34,7 +34,7 @@ because projects in them are more massive than in other folders.
 // Since these functions will not be described here, I advise you not to test them.
 
 ---
-#hacktool:
+**#hacktool:**
 - ReverseShellServer.py
 - VictimShell.py
 - ip_packet_parser.py
@@ -44,7 +44,7 @@ because projects in them are more massive than in other folders.
 -- shell.py
 
 ---
-#vk_utils
+**#vk_utils**
 - friend_likes_post.py
 - restore_removed_chat.py
 - steal_vk_messages.py
