@@ -16,11 +16,11 @@ because projects in them are more massive than in other folders.
 * EventHandler.py
 * BotAccount.py
 * modules
-** commands
-** database
-** ege_parser
-** group_manager
-** march8
+  * commands
+  * database
+  * ege_parser
+  * group_manager
+  * march8
 * ...and other files...
 
 // This bot for communities in vk.com
@@ -35,16 +35,16 @@ because projects in them are more massive than in other folders.
 
 ---
 **#hacktool:**
-- ReverseShellServer.py
-- VictimShell.py
-- ip_packet_parser.py
-- trojan
--- create_script.py
--- mse.py
--- shell.py
+* ReverseShellServer.py
+* VictimShell.py
+* ip_packet_parser.py
+* trojan
+  * create_script.py
+  * mse.py
+  * shell.py
 
 ---
 **#vk_utils**
-- friend_likes_post.py
-- restore_removed_chat.py
-- steal_vk_messages.py
+* friend_likes_post.py
+* restore_removed_chat.py
+* steal_vk_messages.py
