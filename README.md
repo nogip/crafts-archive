@@ -1,15 +1,16 @@
 # Innopolis <3
-╔══╗╔╗─╔╗╔╗─╔╗╔══╗╔═══╗╔══╗╔╗──╔══╗╔══╗
-╚╗╔╝║╚═╝║║╚═╝║║╔╗║║╔═╗║║╔╗║║║──╚╗╔╝║╔═╝
-─║║─║╔╗─║║╔╗─║║║║║║╚═╝║║║║║║║───║║─║╚═╗
-─║║─║║╚╗║║║╚╗║║║║║║╔══╝║║║║║║───║║─╚═╗║
-╔╝╚╗║║─║║║║─║║║╚╝║║║───║╚╝║║╚═╗╔╝╚╗╔═╝║
-╚══╝╚╝─╚╝╚╝─╚╝╚══╝╚╝───╚══╝╚══╝╚══╝╚══╝
+h2 ╔══╗╔╗─╔╗╔╗─╔╗╔══╗╔═══╗╔══╗╔╗──╔══╗╔══╗
+h2 ╚╗╔╝║╚═╝║║╚═╝║║╔╗║║╔═╗║║╔╗║║║──╚╗╔╝║╔═╝
+h2 ─║║─║╔╗─║║╔╗─║║║║║║╚═╝║║║║║║║───║║─║╚═╗
+h2 ─║║─║║╚╗║║║╚╗║║║║║║╔══╝║║║║║║───║║─╚═╗║
+h2 ╔╝╚╗║║─║║║║─║║║╚╝║║║───║╚╝║║╚═╗╔╝╚╗╔═╝║
+h2 ╚══╝╚╝─╚╝╚╝─╚╝╚══╝╚╝───╚══╝╚══╝╚══╝╚══╝
+
 Here all "homeworks" for last 6 month.
 
 I'd like you checking folders whose names start with "#" 
 because projects in them are more massive than in other folders.
-
+---
 #MorrisBot_project:
 - EventHandler.py
 - BotAccount.py
@@ -20,6 +21,7 @@ because projects in them are more massive than in other folders.
 -- group_manager
 -- march8
 - ...and other files...
+
 // This bot for communities in vk.com
 // It can broadcast messages from administrators to members and answer to commands from members.
 // So, you can test it..
@@ -29,7 +31,7 @@ because projects in them are more massive than in other folders.
 // It is the "fake" member without any priveleges. This hack provides the ability to analyze the wall, discussion boards, etc.
 // To add this account add the parameters "-l login -p password".
 // Since these functions will not be described here, I advise you not to test them.
-
+---
 #hacktool:
 - ReverseShellServer.py
 - VictimShell.py
@@ -38,7 +40,7 @@ because projects in them are more massive than in other folders.
 -- create_script.py
 -- mse.py
 -- shell.py
-
+---
 #vk_utils
 - friend_likes_post.py
 - restore_removed_chat.py
