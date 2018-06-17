@@ -111,6 +111,15 @@ def create_service():
         dprint('[@] Symlink to "/etc/systemd/system" created.')
     else:
         dprint('[+] Symlink exists.')
+
+def check_connected_devices():
+    devices = context.list_devices(subsystem='block')
+    for device in devices:
+        devname = device.sys_name
+        devlabel = device.label
+        if len(device.sysname)==4 and device.startswith('sd'):
+            path = mount_device(devname, devlabel)
+            start_calibre_server(path, devlabel)
                 
 def main():
     monitor = pyudev.Monitor.from_netlink(context)
@@ -132,5 +141,6 @@ def main():
         dprint('-'*30)
             
 if __name__ == '__main__':
-    create_service()   
+    create_service()
+    check_connected_devices()
     main()
