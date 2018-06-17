@@ -116,8 +116,8 @@ def check_connected_devices():
     devices = context.list_devices(subsystem='block')
     for device in devices:
         devname = device.sys_name
-        devlabel = device.label
-        if len(device.sysname)==4 and device.startswith('sd'):
+        devlabel = device.get('ID_FS_LABEL')
+        if len(devname)==4 and devname.startswith('sd'):
             path = mount_device(devname, devlabel)
             start_calibre_server(path, devlabel)
                 
