@@ -1,15 +1,3 @@
-╔══╗╔╗─╔╗╔╗─╔╗╔══╗╔═══╗╔══╗╔╗──╔══╗╔══╗
-╚╗╔╝║╚═╝║║╚═╝║║╔╗║║╔═╗║║╔╗║║║──╚╗╔╝║╔═╝
-─║║─║╔╗─║║╔╗─║║║║║║╚═╝║║║║║║║───║║─║╚═╗
-─║║─║║╚╗║║║╚╗║║║║║║╔══╝║║║║║║───║║─╚═╗║
-╔╝╚╗║║─║║║║─║║║╚╝║║║───║╚╝║║╚═╗╔╝╚╗╔═╝║
-╚══╝╚╝─╚╝╚╝─╚╝╚══╝╚╝───╚══╝╚══╝╚══╝╚══╝
-
-Here all "homeworks" for last 6 month.
-
-I'd like you check folders whose names start with "#" 
-because projects in them are more massive than in other folders.
-
 ---
 **#Morris-Bot:**
 * EventHandler.py
