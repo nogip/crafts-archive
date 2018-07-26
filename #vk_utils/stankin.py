@@ -30,8 +30,7 @@ def parse_table():
 		wayname = re.search('\d\d.\d\d.\d\d', ways[0].text).group()
 		pos = ways[2].findAll('td')
 		info.append({
-			wayname: [pos[3].text, pos[4].text, pos[5].text, pos[6].text]
-		})
+			wayname: [pos[3].text, pos[4].text, pos[5].text, pos[6].text]})
 		ways = ways[3:]
 	return info
 
@@ -53,8 +52,8 @@ def notify(msg):
 def scan():
 	while True:
 		finfo = parse_table()
-		full_report = "STANKIN\n{}\n{}\n{}"\
-		.format(gen_report(finfo[0]), gen_report(finfo[1]), gen_report(finfo[2]))
+		full_report = "{}\nSTANKIN || {}\n{}\n{}\n{}"\
+		.format('-'*20, time.ctime(), gen_report(finfo[0]), gen_report(finfo[1]), gen_report(finfo[2]))
 		notify(full_report)
 		time.sleep(TIMEOUT * 60)
 		
