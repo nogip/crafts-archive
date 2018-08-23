@@ -4,16 +4,15 @@
 # GitHub: github.com/nogip
 # Intended for use only for legal purposes
 
-
 import os
 import vk_api
 import datetime
-from multiprocessing.dummy import Pool
+from multiprocessing import Pool
+from VKDatabase import MessageDownloadDBWrapper
 
 
 def auth_required(func):
     def wrapper(self, *args, **kwargs):
-        # if False:
         if 'api' in self.__dict__:
             return func(self, *args, **kwargs)
         else:
@@ -28,6 +27,15 @@ SEPARATE_BLOCK_SIZE = 140
 class VKManage:
     # Need follow imports:
     # os, datetime, multiprocessing.dummy.Pool, vk_api
+
+    # Поскольку сохранение ВСЕХ сообщений может занимать много времени,
+    # а для их протоколирования требуется много действий
+    # сначала происходит сохранение всех сообщений в database,
+    # и уже после этого составлять протокол для каждого собеседника в отдельном процессе.
+    # Чертов GIL
+
+    # ? : Wrapper для обновления дб
+    # ? : Подогнать существующий код для использования бд
 
     SEPARATOR = " - "
 
@@ -50,10 +58,11 @@ class VKManage:
         'nl': NEW_LINE
     }
 
-    def __init__(self, login, password, debug=False, max_workers=20, v=1):
+    def __init__(self, login, password, db_wrap=None, debug=False, max_workers=20, v=0):
         self.verbose = v
         self.debug = debug
-        self.vk = vk_api.VkApi(login, password, )
+        self.db = db_wrap
+        self.vk = vk_api.VkApi(login, password)
         self._max_worker_threads = max_workers
 
         self.__name__ = 'VKManage'
@@ -64,27 +73,25 @@ class VKManage:
         if self.debug and v <= self.verbose:
             print('{} |'.format(self.__name__), *msgs)
 
+    def get(self, key):
+        return self.__getattribute__(key)
+
     def auth(self):
         try:
             self.vk.auth()
             self.api = self.vk.get_api()
-            print('{nl}Login successful{nl}'.format(nl=self.NEW_LINE))
+            if self.db:
+                self.db = self.db(self.api, v=self.verbose, debug=self.debug)
             info = self.api.users.get()[0]
             self.uid = info.get('id')
             self.first_name = info.get('first_name')
             self.last_name = info.get('last_name')
             self.full_name = '{}_{}'.format(self.first_name, self.last_name)
+            self.log('{nl}Login successful{nl}'.format(nl=self.NEW_LINE))
+            self._create_storage_dir()
             return True
         except vk_api.AuthError:
             return False
-
-    @auth_required
-    def save_private_messages(self, user_id=None):
-        self._create_storage_dir()
-        if user_id:
-            self.dump_chat(user_id)
-        else:
-            self._dump_dialogs(self._get_dialogs_ids())
 
     def _create_storage_dir(self):
         self.save_dir = os.path.join(os.getcwd(), self.full_name)
@@ -103,23 +110,35 @@ class VKManage:
             dialogs.append(user_id)
         return dialogs
 
-    def _dump_dialogs(self, user_ids):
+    @auth_required
+    def dump_dialogs(self):
+        user_ids = self._get_dialogs_ids()
         if len(user_ids) > self._max_worker_threads:
             workers = self._max_worker_threads
         else:
             workers = len(user_ids)
-        pool = Pool(workers)
-        pool.map(self.dump_chat, user_ids)
-        pool.close()
+        p = Pool(workers)
+        self.save_dialogs_db(user_ids)
 
-    def _get_chat_history(self, user_id, count=200, **kwargs):
-        # Получение объектов сообщений из диалога
-        return self.api.messages.getHistory(user_id=user_id, count=count, **kwargs)
+        # Не передаем downloader в аргументах потому что увеличится сложность.
+        # Тогда в функции для map нужно проверять, определена ли обертка
+        # для скачивания сообщений при создании экземпляра данного класса.
+        # p.map(self.create_report, user_ids)
+
+        for uid in user_ids:
+            self.create_report(uid)
+
+    @auth_required
+    def save_dialogs_db(self, *args):
+        if not self.db:
+            raise RuntimeError('Database not initialized.')
+        for uid in self._get_dialogs_ids():
+            self.db.download_msgs_with(uid)
+        self.log('[+] All chats downloaded.')
 
     @staticmethod
     def parse_attachments(attachments):
         parsed_attachments = []
-        url_pattern = 'https://vk.com/{at}{oid}_{iid}'
         for attach in attachments:
             attach_type = attach.get('type')
             item = attach.get(attach_type)
@@ -147,7 +166,7 @@ class VKManage:
             elif attach_type == 'video':
                 owner_id = item.get('owner_id')
                 item_id = item.get('id')
-                url = url_pattern.format(at=attach_type, oid=owner_id, iid=item_id)
+                url = 'https://vk.com/{at}{oid}_{iid}'.format(at=attach_type, oid=owner_id, iid=item_id)
 
             elif attach_type == 'sticker':
                 url = item.get('images')[-1].get('url')
@@ -167,32 +186,35 @@ class VKManage:
 
         if len(text) <= max_size:
             return [text, ]
+
         splited_text = text.split()
         result = []
-        splited = False
-        while not splited:
-            sym_counter = 0
-            row = ''
-            parts = 0
-            if not splited_text:
-                return result
-            for part in splited_text:
-                sym_counter += len(part) + 1
-                row += ' ' + part
-                parts += 1
-                if sym_counter > max_size:
-                    result.append(row.lstrip())
-                    splited_text = splited_text[parts:]
-                    break
-                elif part == splited_text[-1]:
-                    splited = True
-                    result.append(row.lstrip())
+
+        sym_counter = 0
+        row = ''
+        while splited_text:
+            part = splited_text.pop(0)
+            sym_counter += len(part) + 1
+            row += ' ' + part
+            if sym_counter > max_size:
+                result.append(row.lstrip())
+                sym_counter = 0
+                row = ''
         return result
 
-    def dump_chat(self, contact_id, count=200):
+    # Этот метод занимает очень много времени
+    # Подозреваю, что это связано с сетевыми запросами.
+    # Теперь все вложения будут сохраняться в базе данных
+
+    @auth_required
+    def create_report(self, contact_id, count=200):
         # Дамп чата
-        contact_info = self.api.users.get(user_ids=contact_id)[0]
+        if self.db:
+            contact_info = self.db.get_user(user_id=contact_id)
+        else:
+            contact_info = self.api.users.get(user_ids=contact_id)[0]
         contact_fullname = '{}_{}'.format(contact_info.get('first_name'), contact_info.get('last_name'))
+
         storage_path = os.path.join(self.save_dir, 'messages')
         if not os.path.exists(storage_path):
             os.mkdir(storage_path)
@@ -202,16 +224,24 @@ class VKManage:
         self.log('({}) open chatfile [{}]'.format(contact_id, chat_file_path))
 
         # Метод получает блок сообщений, записывает их и запрашивает еще, пока не получит все.
-        messages_count = self._get_chat_history(contact_id, count=1).get('count')
+        if self.db:
+            storage = self.db
+            messages_count = storage.count_messages(contact_id)
+        else:
+            storage = self.api.messages
+            messages_count = self.api.messages.getHistory(contact_id, count=1).get('count')
         offset = 0
-
         while True:
-            message_block = self._get_chat_history(contact_id, count=count, offset=offset, rev=1).get('items')
+            if self.db:
+                message_block = storage.getHistory(contact_id)
+            else:
+                message_block = storage.getHistory(contact_id, count=count, offset=offset, rev=1).get('items')
             offset += count
             last_date = None
             for message in message_block:
                 heading_pattern = \
-                    "{nl}{fill:10}  {date} | {owner} <-> {contact} | [{owner_id} <-> {contact_id}]  {fill:10}{nl}{nl}"
+                    "{nl}{fill:10}  {date} | {owner} <-> {contact} | " \
+                    "[{owner_id} <-> {contact_id}]  {fill:10}{nl}{nl}"
                 date = datetime.datetime.fromtimestamp(message.get('date'))
                 if last_date != date.date():
                     last_date = date.date()
@@ -235,15 +265,25 @@ class VKManage:
     def convert_message(self, message):
         text = message.get('text')
         date = datetime.datetime.fromtimestamp(message.get('date'))
-
-        attachments = message.get('attachments')
         fwd_messages = message.get('fwd_messages')
+        attachments = message.get('attachments')
+
+        if isinstance(attachments, bool) or isinstance(fwd_messages, bool):
+            additions = self.api.messages.getById(message_ids=message.get('id')).get('items')[0]
+            if attachments:
+                attachments = additions.get('attachments')
+            if fwd_messages:
+                fwd_messages = additions.get('fwd_messages')
 
         blank = '{blank:{blank_size}}'.format(blank='', blank_size=self.BLANK_SETTING)
 
-        contact_info = None
         if message.get('from_id') != self.uid:
-            contact_info = self.api.users.get(user_ids=message.get('from_id'))[0]
+            if self.db:
+                contact_info = self.db.get_user(user_id=message.get('from_id'))
+            else:
+                contact_info = self.api.users.get(user_ids=message.get('from_id'))[0]
+        else:
+            contact_info = self
 
         # Настройки для сообщения
         format_args = self.FORMAT_ARGS.copy()
@@ -291,7 +331,6 @@ class VKManage:
 
     @auth_required
     def convert_forwarded(self, fwd_messages_list, nesting=1):
-
         if not fwd_messages_list:
             return
 
@@ -346,11 +385,11 @@ class VKManage:
                     fwd_row += attachments_pattern.format(attach=attach, **fwd_format_args)
 
             # Проверяем есть ли еще пересланые сообщения в данном
-            # Если есть, то рекурсивно скачиваем вложенные сообщения
+            # Если есть, то рекурсивно добавляем вложенные сообщения
             # Уровень вложенности +1
             fwd_forward_messages = fwd_message.get('fwd_messages')
             if fwd_forward_messages:
-                fwd_row += self.convert_forwarded(fwd_forward_messages, nesting+1)
+                fwd_row += self.convert_forwarded(fwd_forward_messages, nesting + 1)
 
             fwd_row += '{nl}'.format(nl=fwd_format_args.get('nl'))
         return fwd_row
