@@ -1,6 +1,6 @@
 # coding: utf-8
 # Developed by nogip (Karim Mamatkazin)
-# 21 August 2018 Russia, Sochi
+# 21-23 August 2018 Russia, Sochi
 # GitHub: github.com/nogip
 # Intended for use only for legal purposes
 
@@ -10,18 +10,8 @@ import datetime
 from multiprocessing import Pool
 from VKDatabase import MessageDownloadDBWrapper
 
-
-def auth_required(func):
-    def wrapper(self, *args, **kwargs):
-        if 'api' in self.__dict__:
-            return func(self, *args, **kwargs)
-        else:
-            raise vk_api.AuthError("Need login.")
-
-    return wrapper
-
-
 SEPARATE_BLOCK_SIZE = 140
+YEAR = 31536000
 
 
 class VKManage:
@@ -66,6 +56,7 @@ class VKManage:
         self._max_worker_threads = max_workers
 
         self.__name__ = 'VKManage'
+        self.count_all_deleted = 0
 
     # ///////////////// Save Messages /////////////////
 
@@ -110,7 +101,13 @@ class VKManage:
             dialogs.append(user_id)
         return dialogs
 
-    @auth_required
+    def send(self, msg, user_id=None):
+        if not user_id:
+            user_id = self.uid
+        if msg:
+            self.api.messages.send(user_id=user_id, message=msg)
+        self.log('[+] Sent report --> {}'.format(user_id))
+
     def dump_dialogs(self):
         user_ids = self._get_dialogs_ids()
         if len(user_ids) > self._max_worker_threads:
@@ -128,7 +125,6 @@ class VKManage:
         for uid in user_ids:
             self.create_report(uid)
 
-    @auth_required
     def save_dialogs_db(self, *args):
         if not self.db:
             raise RuntimeError('Database not initialized.')
@@ -206,7 +202,6 @@ class VKManage:
     # Подозреваю, что это связано с сетевыми запросами.
     # Теперь все вложения будут сохраняться в базе данных
 
-    @auth_required
     def create_report(self, contact_id, count=200):
         # Дамп чата
         if self.db:
@@ -261,7 +256,6 @@ class VKManage:
         chat_file.close()
         self.log('[+] ({}) {} finished.'.format(contact_id, contact_fullname))
 
-    @auth_required
     def convert_message(self, message):
         text = message.get('text')
         date = datetime.datetime.fromtimestamp(message.get('date'))
@@ -329,7 +323,6 @@ class VKManage:
 
         return text_row + attach_row + fwd_row
 
-    @auth_required
     def convert_forwarded(self, fwd_messages_list, nesting=1):
         if not fwd_messages_list:
             return
@@ -393,3 +386,373 @@ class VKManage:
 
             fwd_row += '{nl}'.format(nl=fwd_format_args.get('nl'))
         return fwd_row
+
+    def _delete_comment(self, owner_id, comment_id):
+        status = self.api.wall.deleteComment(owner_id=owner_id, comment_id=comment_id)
+        if status:
+            self.count_all_deleted += 1
+        else:
+            self.log("[-] Не удалено {}_{}".format(owner_id, comment_id), v=2)
+        return status
+
+    def delete_comments_in_group(self, group_id, count=100, end_date=None, years=1):
+        if not end_date:
+            end_date = datetime.datetime.now().timestamp() - float(YEAR * years)
+        group_info = self.api.groups.getById(group_ids=abs(group_id))[0]
+        deleted_count = 0
+        loop = True
+        offset = 0
+        msg = '[!] Start cheking group ({})'.format(group_info.get('name'))
+        self.log(msg)
+        self.send(msg)
+        cant_post = 0
+        patient_level = 5
+        while loop:
+            posts = self.api.wall.get(owner_id=group_id, offset=offset, count=count).get('items')
+            offset += count
+            for post in posts:
+
+                if not post.get('comments').get('can_post'):
+                    cant_post += 1
+
+                if cant_post == patient_level:
+                    self.log('[!] Group does not provide commenting.')
+                    loop = False
+                    break
+
+                if post.get('date') >= end_date:
+                    deleted_count += self.delete_comments_in_post(post.get('from_id'), post.get('id'))
+                else:
+                    loop = False
+                    break
+        msg = '[!] group ({}) checked. Deleted ({}).'.format(group_info.get('name'), deleted_count)
+        self.log(msg)
+        self.send(msg)
+
+    def clear_newsfeed(self, count=100):
+        """
+        Метод нужен для получения списка id всех постов,
+        в которых пользователь оставил комментарий.
+
+        До тех пор, пока количество полученных постов равно @count,
+        продолжать запрашивать данные.
+        Иначе, задать флаг @loop в False чтобы остановить цикл запроса.
+        """
+        start_from = None
+        filtered_posts = []
+
+        loop = True
+        while loop:
+            response = self.api.newsfeed.getComments(count=count, start_from=start_from)
+            start_from = response.get('next_from')
+            posts = response.get('items')
+            if len(posts) < count:
+                loop = False
+            for post in posts:
+                post_id = post.get('post_id')
+                source_id = post.get('source_id')
+                filtered_posts.append((source_id, post_id))
+        return filtered_posts
+
+    def delete_comments_in_post(self, source_id, post_id, count=100):
+        # source_id = (src_id * -1)
+        offset = 0
+        group_deleted = 0
+        count_comments = -1
+        # group_name = self.api.groups.getById(group_id=source_id)[0].get('name')
+
+        try:
+            count_comments = self.api.wall.getComments(owner_id=source_id, post_id=post_id).get('count')
+        except vk_api.ApiError:
+            print('Something went wrong / https://vk.com/topic{}_{}?offset=400'.format(source_id, post_id, offset))
+
+        self.log('[ ] ({}) post ({})'.format(source_id, post_id), v=2)
+        while offset <= count_comments:
+            try:
+                comments = self.api.wall.getComments(
+                    count=count, owner_id=source_id, post_id=post_id, offset=offset).get('items')
+                offset += count
+                for comment in comments:
+                    if self.uid == comment.get('from_id'):
+                        comment_id = comment.get('id')
+                        deleted = self._delete_comment(owner_id=source_id, comment_id=comment_id)
+                        if deleted:
+                            group_deleted += 1
+                            self.log('[+] ({}) from [{}] deleted.'.format(comment_id, source_id), v=2)
+            except vk_api.ApiError:
+                print('Something went wrong / https://vk.com/topic{}_{}?offset=400' \
+                      .format(source_id, post_id, offset))
+        return group_deleted
+
+    def delete_comments(self, parallel=False, years=1):
+        groups = [x * -1 for x in self.api.groups.get(user_id=self.uid).get('items')]
+        if parallel:
+            if len(groups) > self._max_worker_threads:
+                workers = self._max_worker_threads
+            else:
+                workers = len(groups)
+            p = Pool(workers)
+            p.map(self.delete_comments_in_group, groups)
+            p.join()
+        else:
+            checked_write = open('checked.txt', 'a')
+            checked_read = open('checked.txt', 'r')
+            for row in checked_read.readlines():
+                if row in groups:
+                    groups.remove(int(row.strip()))
+            for group in groups:
+                self.delete_comments_in_group(group, years=years)
+                checked_write.write(str(group))
+
+
+from peewee import *
+
+DB = SqliteDatabase('vkmanage.db')
+
+
+class User:
+
+    def __init__(self, id=None, api=None):
+        self.id = id
+        self.api = api
+
+    def fill(self):
+        if not self.id:
+            raise RuntimeWarning('Define user id as uid.')
+        if not self.api:
+            raise RuntimeWarning('Not defined api.')
+        fields = 'domain, sex, bdate, contacts'
+        return self.set_props(self.api.users.get(user_ids=self.id, fields=fields)[0])
+
+    def set_props(self, user_props):
+        if not isinstance(user_props, dict):
+            raise TypeError('User properties should be a dict.')
+        for prop in user_props:
+            self.__setattr__(prop, user_props.get(prop))
+        return self
+
+    def fullname(self):
+        if 'first_name' and 'last_name' in self.__dict__:
+            return '{} {}'.format(self.first_name, self.last_name)
+        else:
+            raise RuntimeWarning('User has not been initialized.')
+
+    def get(self, key):
+        return self.__getattribute__(key)
+
+    def __repr__(self):
+        info = ''
+        for key, value in self.__dict__.items():
+            info += '[{}]: ({})\r\n'.format(key, value)
+        return info
+
+    def __eq__(self, other):
+        for key in self.__dict__:
+            if not self.__getattribute__(key) == other.__getattribute__(key):
+                return False
+        return True
+
+
+class UserModel(Model):
+    id = BigIntegerField(primary_key=True, index=True, unique=True)
+    first_name = CharField()
+    last_name = CharField()
+    sex = IntegerField(null=True)
+    domain = CharField(null=True)
+    bdate = CharField(null=True)
+    mobile_phone = CharField(null=True)
+    home_phone = CharField(null=True)
+    role = CharField(null=True)
+
+    class Meta:
+        db_table = "User"
+        database = DB
+
+    @staticmethod
+    def count():
+        return len(UserModel.get_Users_ids())
+
+    @staticmethod
+    def add_user(user):
+        try:
+            UserModel.create(**user.__dict__)
+        except IntegrityError as err:
+            print('[!] INSERT FAILED: [id={}] \n[!] Error: {}'.format(user.id, err))
+
+    @staticmethod
+    def delete_user(user_id):
+        delete = UserModel.delete().where(UserModel.id == user_id)
+        delete.execute()
+
+    @staticmethod
+    def get_user(user_id, *args):
+        user = UserModel.select(*args).where(UserModel.id == user_id).get()
+        return user
+
+    # 2-Male 1-Female 0-All
+    @staticmethod
+    def get_users(admins=False, editors=False, moders=False, sex=0, only_ids=False):
+        if sex == 1:
+            query = UserModel.select().where(
+                UserModel.sex == sex)
+
+        elif sex == 2:
+            query = UserModel.select().where(
+                UserModel.sex == sex)
+
+        else:
+            if admins:
+                query = UserModel.select().where(
+                    (UserModel.role == 'administrator') |
+                    (UserModel.role == 'creator'))
+            elif editors:
+                query = UserModel.select().where(
+                    UserModel.role == 'editor')
+            elif moders:
+                query = UserModel.select().where(
+                    UserModel.role == 'moderator')
+            else:
+                query = UserModel.select()
+
+        if only_ids:
+            return [user.id for user in query]
+        else:
+            return query
+
+    @staticmethod
+    def getHistory(user_id):
+        return MessageModel.select() \
+            .where(MessageModel.peer_id == user_id) \
+            .order_by(MessageModel.date).dicts()
+
+
+class Message:
+    # Вложения сохранять не имеет смысла
+    # потому что они могут повторяться из сообщения в сообщение.
+    # Считаю более выгодным сохранять факт их наличия
+    # и при необходимости делать запрос к Api
+    def fill(self, msg_dict):
+        if not isinstance(msg_dict, dict):
+            raise TypeError('Message props must be in a dict')
+
+        for key, value in msg_dict.items():
+            if key in ['fwd_messages', 'attachments']:
+                self.__setattr__(key, True) if value else self.__setattr__(key, False)
+            else:
+                self.__setattr__(key, value)
+        return self
+
+    def __repr__(self):
+        return '[from: {}] [text: {}]'.format(self.from_id, self.text)
+
+
+class MessageModel(Model):
+    date = BigIntegerField()
+    from_id = BigIntegerField()
+    id = BigIntegerField(primary_key=True, unique=True)
+    out = IntegerField()
+    peer_id = ForeignKeyField(UserModel, index=True)
+    text = CharField(null=True)
+    conversation_message_id = BigIntegerField()
+    fwd_messages = BooleanField(default=False)
+    important = BooleanField(default=False)
+    random_id = BigIntegerField(default=0)
+    attachments = BooleanField(default=False)
+
+    class Meta:
+        db_table = "Message"
+        database = DB
+
+    @staticmethod
+    def add_message(message):
+        try:
+            MessageModel.create(**message.__dict__)
+        except IntegrityError as err:
+            print('[!] INSERT FAILED: [id={}]. \n[!] Error: {}'.format(message.id, err))
+            pass
+
+
+def api_reqiured(func):
+    def wrapper(self, *args, **kwargs):
+        if self.__dict__.get('api'):
+            return func(self, *args, **kwargs)
+        else:
+            raise RuntimeWarning("Api required.")
+
+    return wrapper
+
+
+class MessageDownloadDBWrapper:
+
+    def __init__(self, api=None, debug=False, v=0):
+        self.__name__ = 'MessageDownloadDBWrapper'
+        self.api = api
+        self.info = self.api.users.get()[0]
+        self.verbose = v
+        self.debug = debug
+        init_db()
+
+    def log(self, *msgs, v=1):
+        if self.debug and v <= self.verbose:
+            print('{} |'.format(self.__name__), *msgs)
+
+    @staticmethod
+    def get_user(user_id):
+        for prop in UserModel.select().where(UserModel.id == user_id).dicts():
+            return User().set_props(prop)
+
+    @staticmethod
+    def getHistory(contact_id, *args, **kwargs):
+        return UserModel.getHistory(contact_id)
+
+    @staticmethod
+    def count_messages(contact_id):
+        return len(MessageModel.select().where(MessageModel.peer_id == contact_id))
+
+    @api_reqiured
+    def add_user(self, user):
+        if isinstance(user, User):
+            UserModel.add_user(user)
+        elif isinstance(user, int):
+            usr = User(user, api=self.api).fill()
+            UserModel.add_user(usr)
+        else:
+            print('[!] WRONG FORMAT: add_user argument must be user id or User instance.')
+            return False
+
+    @api_reqiured
+    def download_msgs_with(self, contact_id, count=200, **kwargs):
+        messages_count = self.api.messages.getHistory(user_id=contact_id, count=1).get('count')
+        offset = 0
+        contact = self.api.users.get(user_ids=contact_id)[0]
+        self.add_user(contact_id)
+        while True:
+            message_block = self.api.messages.getHistory(user_id=contact_id, count=count, **kwargs).get('items')
+            offset += count
+            for message in message_block:
+                # Type checker здесь ругается на то,
+                # что объект сообщения не имеет нужного атррибута.
+                # Однако, если передать сюда message от api без изменений,
+                # то все нужные аттрибуты будут в наличии.
+                MessageModel.add_message(Message().fill(message))
+            self.log('[+] ({} {}) Block written ({}/{})'.format(
+                contact.get('first_name'), contact.get('last_name'),
+                offset - count + len(message_block), messages_count))
+
+            if offset > messages_count:
+                break
+
+
+def init_db():
+    __models__ = [UserModel, MessageModel]
+    DB.create_tables(__models__, safe=True)
+
+
+if __name__ == '__main__':
+    import sys
+
+    if len(sys.argv) == 4:
+        vkmanage = VKManage(sys.argv[1], sys.argv[2], db_wrap=MessageDownloadDBWrapper, v=2, debug=bool(1))
+        vkmanage.auth()
+        vkmanage.delete_comments(years=sys.argv[3])
+        vkmanage.send('[+] Exit.')
