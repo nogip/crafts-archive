@@ -1,6 +1,0 @@
-{
-    "login": "",
-    "password": "",
-    "timeout": 15,
-    "phone_user_agent": ""
-}
