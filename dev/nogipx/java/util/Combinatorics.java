@@ -1,6 +1,8 @@
-package codevault.java.util;
-import codevault.java.util.DigitStream;
-import codevault.java.util.NumProcess;
+package dev.nogipx.java.util;
+
+import java.util.List;
+import java.util.ArrayList;
+import java.util.stream.Collectors;
 
 class Combinatorics {
 

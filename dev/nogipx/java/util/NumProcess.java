@@ -1,4 +1,7 @@
-package codevault.java.util;
+package dev.nogipx.java.util;
+
+import java.util.Arrays;
+import java.util.stream.Collectors;
 
 class NumProcess {
 
@@ -15,6 +18,17 @@ class NumProcess {
           return -1;
       }) != -1;
   }
+
+  public static boolean isDigitsDesc(long num) {
+    return Long.toString(num).chars()
+      .map(d -> d - '0')
+      .reduce(0, (a, b) -> {
+        if (a >= b || a == 0) 
+          return (a != -1) ? b : a;
+        else 
+          return -1;
+      }) != -1;
+  }
   
   public static long reverse(long num) {
     return Long.valueOf(new StringBuilder()
@@ -24,7 +38,6 @@ class NumProcess {
     );
   }
 
-
   public static String digitsToString(int[] a) {
     return Arrays.stream(a)
       .boxed()
@@ -32,11 +45,9 @@ class NumProcess {
       .collect(Collectors.joining());
   }
 
-
   public static long digitsToLong(int[] a) {
     return Long.valueOf(digitsToString(a));
   }
-
 
   public static int digitsToInt(int[] a) {
     return Integer.valueOf(digitsToString(a));

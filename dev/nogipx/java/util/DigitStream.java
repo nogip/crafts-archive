@@ -1,4 +1,6 @@
-package codevault.java.util;
+package dev.nogipx.java.util;
+
+import java.util.stream.IntStream;
 
 class DigitStream {
 

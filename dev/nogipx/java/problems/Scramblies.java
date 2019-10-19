@@ -1,4 +1,7 @@
+package dev.nogipx.java.problems;
+
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class Scramblies {
@@ -21,7 +24,7 @@ public class Scramblies {
   }
 
   private static Map<String, Long> decomposeStr(String str) {
-    return List.of(str.split("")).stream().parallel()
-      .collect(Collectors.groupingBy(c -> c, Collectors.counting()));
+    return List.of(str.split("")).parallelStream()
+      .collect(Collectors.groupingByConcurrent(Function.identity(), Collectors.counting()));
   }
 }
