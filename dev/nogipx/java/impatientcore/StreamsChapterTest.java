@@ -1,13 +1,16 @@
 package dev.nogipx.java.impatientcore;
 
-import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
 import static org.junit.Assert.assertEquals;
@@ -82,7 +85,29 @@ public class StreamsChapterTest {
   public void ex6() {}
   public void ex7() {}
   public void ex8() {}
-  public void ex9() {}
+
+  /**
+   * EX 9
+   * Read the words from dicitonary (/usr/share/dict/words)
+   * into a stream and produce an array of all words
+   * containing distinct vowels.
+   */
+  @Test
+  public void ex9ContainingDistinctVowels() throws IOException {
+    List<String> words = Files.lines(Paths.get("/usr/share/dict/words"))
+      .filter(w -> {
+        Map<String, Long> vowels = Arrays.stream(
+          w.toLowerCase()
+          .replaceAll("[^auoiye]", "")
+          .split(""))
+          .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+
+        return !vowels.entrySet().stream()
+          .anyMatch(e -> e.getValue() > 1);
+      })
+      .collect(Collectors.toList());
+    System.out.println(words.size());
+  }
 
   /**
    * EX 10
