@@ -15,14 +15,14 @@ public class MultifunctionalMapper {
    * and sequentially applies each mapper to each value (perform a transformation)
    */
   public static final Function<List<IntUnaryOperator>, UnaryOperator<List<Integer>>> multifunctionalMapper =
-    ops -> numbers ->
-      numbers.stream().map(x -> {
-        int xm = x;
-        for (IntUnaryOperator op : ops)
-          xm = op.applyAsInt(xm);
-        return xm;
-      })
-      .collect(Collectors.toList());
+    ops -> numbers -> {
+      IntUnaryOperator mapFun = ops.stream()
+        .reduce(IntUnaryOperator::andThen)
+        .get();
+      return numbers.stream()
+        .map(mapFun::applyAsInt)
+        .collect(Collectors.toList());
+    };
 
   /**
    * The operator accepts an integer list.
